@@ -210,15 +210,78 @@ function calculateConfidence(comparablesFound: number, scrapedCount: number, has
   return Math.min(95, Math.max(35, Math.round(score)));
 }
 
+
+// =====================================================================
+// MAPEO DE CIUDADES - Facebook Marketplace usa códigos específicos
+// =====================================================================
+const FB_CITY_SLUGS: Record<string, { slug: string; lat: number; lng: number; radius: number; keywords: string[] }> = {
+  'quito': {
+    slug: 'quito',
+    lat: -0.1807, lng: -78.4678, radius: 25,
+    keywords: ['quito', 'cumbaya', 'cumbayá', 'tumbaco', 'pomasqui', 'calderon', 'calderón', 'conocoto', 'valle de los chillos', 'pichincha', 'la carolina', 'la mariscal', 'cumbayá'],
+  },
+  'ambato': {
+    slug: 'ambatoecuador',  // FB usa "ambatoecuador" no "ambato"
+    lat: -1.2491, lng: -78.6168, radius: 15,
+    keywords: ['ambato', 'huachi', 'ficoa', 'tungurahua', 'cevallos', 'pelileo', 'baños', 'banos', 'ingahurco', 'atocha', 'el recreo', 'celiano monge'],
+  },
+};
+
+// Lista de OTRAS ciudades que NO queremos en los resultados
+const OTHER_CITIES_KEYWORDS = ['guayaquil', 'cuenca', 'manta', 'machala', 'loja', 'ibarra', 'riobamba', 'esmeraldas', 'portoviejo', 'duran', 'durán', 'samborondón', 'samborondon', 'salinas', 'milagro'];
+
+function filterByCityKeywords(items: ScrapedItem[], cityKey: string): ScrapedItem[] {
+  const cityConfig = FB_CITY_SLUGS[cityKey];
+  if (!cityConfig) return items;
+  
+  const before = items.length;
+  const filtered = items.filter(item => {
+    const text = `${item.titulo || ''} ${item.ubicacion || ''}`.toLowerCase();
+    
+    // Si menciona la ciudad correcta o algún sector conocido → OK
+    if (cityConfig.keywords.some(kw => text.includes(kw))) return true;
+    
+    // Si menciona OTRA ciudad grande → DESCARTAR
+    const wrongCity = OTHER_CITIES_KEYWORDS.some(oc => {
+      // Solo descartamos si NO está la ciudad correcta también mencionada
+      const isOtherCity = text.includes(oc);
+      const isOurCity = cityConfig.keywords.some(kw => text.includes(kw));
+      return isOtherCity && !isOurCity;
+    });
+    if (wrongCity) {
+      console.log(`   🚫 Descartado por ciudad: "${item.ubicacion?.slice(0, 50)}"`);
+      return false;
+    }
+    
+    // Si no menciona ninguna ciudad concreta → dejamos pasar (asumimos correcta)
+    return true;
+  });
+  
+  console.log(`   🏙️ Filtro ciudad ${cityKey}: ${filtered.length}/${before}`);
+  return filtered;
+}
+
 async function scrapeFacebook(data: PropertyData, signal: AbortSignal): Promise<ScrapedItem[]> {
   const apifyToken = process.env.NEXT_PUBLIC_APIFY_TOKEN || ''; 
   if (!apifyToken) return [];
 
+  // Mapeo correcto de ciudad
+  const cityKey = data.city.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '');
+  const cityConfig = FB_CITY_SLUGS[cityKey] || FB_CITY_SLUGS['quito'];
+  
+  // Usar coords del usuario si las marcó en el mapa, sino las de la ciudad
+  const lat = data.lat || cityConfig.lat;
+  const lng = data.lng || cityConfig.lng;
+  
   const formattedSector = data.sector.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/\s+/g, '-');
-  const formattedCity = data.city.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '');
   const operation = data.operation || 'venta';
   const opKw = operation === 'venta' ? 'venta' : 'arriendo';
-  const fbTargetUrl = `https://www.facebook.com/marketplace/${formattedCity}/search/?query=${opKw}%20${formattedSector}%20${data.type}`;
+  
+  // URL con coordenadas + radio (Facebook respeta esto)
+  const fbTargetUrl = `https://www.facebook.com/marketplace/${cityConfig.slug}/search/?query=${opKw}%20${formattedSector}%20${data.type}&latitude=${lat}&longitude=${lng}&radius=${cityConfig.radius}`;
+  
+  console.log(`🔵 FB scraping (${operation}) en ${data.city} [slug: ${cityConfig.slug}]`);
+  
   const actorId = 'curious_coder~facebook-marketplace';
   
   const input = {
@@ -238,13 +301,16 @@ async function scrapeFacebook(data: PropertyData, signal: AbortSignal): Promise<
     const result = await res.json();
     console.log('🔵 FB items:', Array.isArray(result) ? result.length : 'no es array');
     if (!Array.isArray(result)) return [];
-    return result.slice(0, SCRAPE_LIMITS.FB_MAX_ITEMS).map((item: any) => ({
+    const items = result.slice(0, SCRAPE_LIMITS.FB_MAX_ITEMS).map((item: any) => ({
       titulo: item.title || item.marketplace_listing_title || `${data.type} en ${data.sector}`,
       precio: item.price?.amount || item.listing_price?.formatted_amount || item.price || "",
       ubicacion: item.location || item.location_text || `${data.sector}, ${data.city}`,
       url: item.url || item.listingUrl || item.facebookUrl || fbTargetUrl,
       fuente: 'Facebook'
     }));
+    
+    // Filtro adicional por keywords de ciudad
+    return filterByCityKeywords(items, cityKey);
   } catch (e: any) {
     console.error("❌ FB FAILED:", e?.message || e);
     return [];
@@ -399,7 +465,9 @@ export async function scrapeWithApify(data: PropertyData, signal: AbortSignal): 
     return true;
   });
   
-  const filtered = filterByOperation(unique, operation);
+  const cityKey = data.city.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '');
+  const cityFiltered = filterByCityKeywords(unique, cityKey);
+  const filtered = filterByOperation(cityFiltered, operation);
   return filterOutliers(filtered);
 }
 
