@@ -1,7 +1,7 @@
 "use client";
 
 import React from 'react';
-import { Store, Building2, Globe, ShieldCheck, Database, Zap, Lock } from 'lucide-react';
+import { Store, Building2, Globe, Award, ShieldCheck, Database, Zap, Lock } from 'lucide-react';
 import { ScrapeSource } from '@/types';
 import { SOURCE_META, estimateCostPerAvaluo } from '@/lib/api';
 
@@ -14,12 +14,12 @@ const SOURCE_ICONS: Record<ScrapeSource, React.ReactNode> = {
   facebook: <Store size={20} />,
   plusvalia: <Building2 size={20} />,
   properati: <Globe size={20} />,
+  remax: <Award size={20} />,
 };
 
 export default function SourceSelector({ selected, onChange }: SourceSelectorProps) {
   const toggle = (source: ScrapeSource) => {
     if (selected.includes(source)) {
-      // No permitir desmarcar la última
       if (selected.length === 1) return;
       onChange(selected.filter(s => s !== source));
     } else {
@@ -33,7 +33,7 @@ export default function SourceSelector({ selected, onChange }: SourceSelectorPro
     <div className="flex flex-col gap-4">
       <div>
         <h3 className="text-sm font-semibold text-slate-700 mb-1">¿Dónde buscar comparables?</h3>
-        <p className="text-xs text-slate-500">Selecciona una o varias fuentes. Más fuentes = mejor avalúo, mayor costo.</p>
+        <p className="text-xs text-slate-500">Selecciona una o varias fuentes. Más fuentes = mejor avalúo.</p>
       </div>
 
       <div className="flex flex-col gap-2">
@@ -41,6 +41,7 @@ export default function SourceSelector({ selected, onChange }: SourceSelectorPro
           const meta = SOURCE_META[source];
           const isSelected = selected.includes(source);
           const isDefault = source === 'facebook';
+          const isRecommended = source === 'remax';
 
           return (
             <button
@@ -60,13 +61,18 @@ export default function SourceSelector({ selected, onChange }: SourceSelectorPro
                 {SOURCE_ICONS[source]}
               </div>
               <div className="flex-1 min-w-0">
-                <div className="flex items-center gap-2">
+                <div className="flex items-center gap-2 flex-wrap">
                   <h4 className={`text-sm font-bold ${isSelected ? 'text-[#1a56db]' : 'text-slate-700'}`}>
                     {meta.label}
                   </h4>
                   {isDefault && (
                     <span className="text-[9px] font-bold uppercase tracking-wider bg-blue-100 text-blue-600 px-2 py-0.5 rounded-full">
                       Por defecto
+                    </span>
+                  )}
+                  {isRecommended && (
+                    <span className="text-[9px] font-bold uppercase tracking-wider bg-emerald-100 text-emerald-700 px-2 py-0.5 rounded-full">
+                      Recomendado
                     </span>
                   )}
                 </div>
@@ -91,11 +97,8 @@ export default function SourceSelector({ selected, onChange }: SourceSelectorPro
         <span className="font-mono font-semibold text-slate-600">~${cost.toFixed(2)} por avalúo</span>
       </div>
 
-      {/* ============================================================ */}
-      {/* BANNER EXCLUSIVO UBL - placebo de confianza */}
-      {/* ============================================================ */}
+      {/* Banner placebo */}
       <div className="bg-gradient-to-br from-slate-900 to-slate-800 text-white p-4 rounded-2xl shadow-lg relative overflow-hidden">
-        {/* Decoración de fondo */}
         <div className="absolute top-0 right-0 w-32 h-32 bg-blue-500/20 rounded-full blur-3xl -translate-y-12 translate-x-12" aria-hidden="true"></div>
         <div className="absolute bottom-0 left-0 w-24 h-24 bg-emerald-500/10 rounded-full blur-2xl translate-y-8 -translate-x-8" aria-hidden="true"></div>
         

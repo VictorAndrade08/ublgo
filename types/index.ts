@@ -2,7 +2,7 @@ export type PropertyType = 'Departamento' | 'Casa' | 'Suite' | 'Terreno';
 export type City = 'Quito' | 'Ambato';
 export type Condition = 'Excelente' | 'Bueno' | 'Regular' | 'A remodelar';
 export type Operation = 'venta' | 'arriendo';
-export type ScrapeSource = 'facebook' | 'plusvalia' | 'properati';
+export type ScrapeSource = 'facebook' | 'plusvalia' | 'properati' | 'remax';
 
 export type ViewType = 'Sin vista' | 'Vista a la ciudad' | 'Vista a montaña' | 'Vista al valle' | 'Vista al mar' | 'Vista panorámica';
 export type Orientation = 'Norte' | 'Sur' | 'Este' | 'Oeste' | 'No sé';
